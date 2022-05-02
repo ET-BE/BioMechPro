@@ -4,13 +4,13 @@
 
 * This is the BioMechPro pipeline (with newly developed modules) for processing both the optical motion capture system in the Lopes lab and 
   the data from the wearable kinetic measurement system (Xsens + Moticon pressure insoles).
-* This pipline is based on a developed framework in UT BE group. Orginal repo can be found here: https://bitbucket.org/ctw-bw/biomechpro/wiki/Home
+* This pipline is based on a developed framework in UT BE group (the Master branch)
 * 1.0
 
 ### How do I set up? ###
 
-* Check Wiki of the origional BioMechPro pipeline for basic operation guidline: https://bitbucket.org/ctw-bw/biomechpro/wiki/Home
-* Download this repository
+* Check Wiki for the basic operation guidlines
+* Download this repository branch
 * Download the experimental data from here: https://doi.org/10.5281/zenodo.6457662
 * Add the folder and all subfolder into your Matlab path
 * Open the 'DataProcessing_AllSubjsAllTrails.mat'
