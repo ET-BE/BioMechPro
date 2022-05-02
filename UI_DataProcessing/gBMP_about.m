@@ -1,0 +1,9 @@
+function [] = gBMP_about(hObject,eventdata)
+% About info
+
+    msgbox({'Batch processing UI v1.0',...
+        'Mark Vlutters, University of Twente, 2015-2016',...
+        'mrkvlttrs@gmail.com'},...
+        'About','Help');
+
+end
