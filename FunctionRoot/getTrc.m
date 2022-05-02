@@ -1,4 +1,4 @@
-function [] = getTrc(C3Ddata,filename,varargin)
+function [] = getTrc(C3Ddata,filename,varargin, removeEndFrames)
 %% getTrc
 % Get .trc file from data, for example for use in OpenSim
 % This file is required for scaling a general simbody model to subject characteristics.
@@ -36,41 +36,14 @@ function [] = getTrc(C3Ddata,filename,varargin)
 
 %% Check input
 
-if nargin == 2
-    dataflag = 1;
-    permvec = [1 2 3];
-elseif nargin == 3
-    dataflag = varargin{1};
-    permvec = [1 2 3];
-elseif nargin == 4
-    dataflag = varargin{1};
-    permvec = varargin{2};
-elseif nargin > 4
-    error('getTrc:inputs','Too many input arguments');
-end
-
-% Check if fields are compatible with the flag
-if ( (dataflag == 1) && ~isfield(C3Ddata.Marker,'MarkerData') ) || ...
-        ( (dataflag == 2) && ~isfield(C3Ddata.Marker,'ProbedData')) || ...
-        ( (dataflag == 3) && (~isfield(C3Ddata.Marker,'MarkerData') || ~isfield(C3Ddata.Marker,'ProbedData')) )
-    error('getTrc:datafield','MarkerData or ProbedData field unavailable in C3Ddata structure');
-end
-
 % Check trialname
 if ~ischar(filename)
     error('getTrc:trialname','Input trialname must be a string');
 end
 
 %% Collect some info
-markerFrameRate = C3Ddata.Marker.MarkerFrameRate;
-
-if dataflag == 1
-    nMarker = size(C3Ddata.Marker.MarkerData,2);
-elseif dataflag == 2
-    nMarker = size(C3Ddata.Marker.ProbedData,2);
-elseif (dataflag == 3)
-    nMarker = size(C3Ddata.Marker.MarkerData,2) + size(C3Ddata.Marker.ProbedData,2);
-end
+markerFrameRate = C3Ddata.Resample.FrameRate;
+nMarker = size(C3Ddata.Resample.Marker, 3);
 
 % If full path is supplied, take last part for name inside trc file
 if ~isempty(strfind(filename,'\'))
@@ -82,68 +55,20 @@ else
     pathname = pwd;
 end
 
-% Check if sync indices exist
-if ~isfield(C3Ddata.Marker,'MarkerSyncIdx') || ~isfield(C3Ddata.Force,'ForceSyncIdx')
-    warning('getTrc:syncIdx',['No sync indices found in ' infilename '. Assuming synchronized marker-force data (if any)']);
-    
-    markerSyncIdx = [1 size(C3Ddata.Marker.MarkerData,1)];
-else
-    markerSyncIdx = C3Ddata.Marker.MarkerSyncIdx;
-end
-
-nFrames = 1 + markerSyncIdx(end) - markerSyncIdx(1);
+nFrames = size(C3Ddata.Resample.Marker, 1) - removeEndFrames;  % remove certain frames at the data end
 
 %% Collect header to write
-
-if dataflag == 1
-    writeHeader = C3Ddata.Marker.MarkerDataLabel;
-elseif dataflag == 2
-    writeHeader = C3Ddata.Marker.ProbedDataLabel;
-elseif dataflag == 3
-    % Note: write probe data first, probably used most
-    writeHeader = [C3Ddata.Marker.ProbedDataLabel C3Ddata.Marker.MarkerDataLabel];
-end
+writeHeader = C3Ddata.Marker.DataLabel;
 
 %% Collect data to write
+markerData = C3Ddata.Resample.Marker(1:nFrames,:, :);
 
-if dataflag == 1
+msiz = size(markerData);
 
-    markerData = C3Ddata.Marker.MarkerData(markerSyncIdx(1):markerSyncIdx(end),:,permvec);
-    
-    msiz = size(markerData);
-    
-    writeData = [...
-        (1:msiz(1))'  , ...
-        (0:msiz(1)-1)'./markerFrameRate , ...
-        reshape(permute(markerData,[1 3 2]),[msiz(1) msiz(2).*msiz(3)]) ];
-    
-elseif dataflag == 2
-    
-    probedData = C3Ddata.Marker.ProbedData(markerSyncIdx(1):markerSyncIdx(end),:,permvec);
-    
-    psiz = size(probedData);
-    
-    writeData = [...
-        (1:psiz(1))' , ...
-        (0:psiz(1)-1)'./markerFrameRate , ...
-        reshape(permute(probedData,[1 3 2]),[psiz(1) psiz(2).*psiz(3)]) ];
-    
-elseif dataflag == 3
-    
-    markerData = C3Ddata.Marker.MarkerData(markerSyncIdx(1):markerSyncIdx(end),:,permvec);
-    probedData = C3Ddata.Marker.ProbedData(markerSyncIdx(1):markerSyncIdx(end),:,permvec);
-    
-    msiz = size(markerData);
-    psiz = size(probedData);
-
-    % Note: write probe data first, probably used most
-    writeData = [...
-        (1:msiz(1))' , ...
-        (0:msiz(1)-1)'./markerFrameRate , ...
-        reshape(permute(probedData,[1 3 2]),[psiz(1) psiz(2).*psiz(3)]) , ...
-        reshape(permute(markerData,[1 3 2]),[msiz(1) msiz(2).*msiz(3)]) ];
-    
-end
+writeData = [...
+    (1:msiz(1))'  , ...
+    (0:msiz(1)-1)'./markerFrameRate , ...
+    reshape(markerData,[msiz(1) msiz(2).*msiz(3)])];
 
 %% Create file and headers
 % File will contain all markers and probe positions

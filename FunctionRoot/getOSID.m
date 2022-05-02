@@ -59,9 +59,11 @@ function [] = getOSID(osinstallpath,subjosmod,subjosidset,subjosidxldset,subjosi
 % Extract output directory from ID.xml file 
 if ~isempty(strfind(subjosidset,'\'))
     foo = strfind(subjosidset,'\');
-    stofilepath = subjosidset(1:foo(end));
+    stofilepath = subjosidset(1:foo(end-1));
+    xmlfilepath = subjosidset(1:foo(end));
 else
     stofilepath = pwd;
+    xmlfilepath = pwd;
 end
 
 % Extract general output file name from IK.mot file
@@ -79,7 +81,7 @@ xmlXload = xmlread(subjosidxldset);
 xmlXload.getElementsByTagName('datafile').item(0).setTextContent(subjosidxldmot);
 
 % Write modified settings .xml file
-xldsetFile = [stofilepath genfilename 'XLDset.xml'];
+xldsetFile = [xmlfilepath genfilename 'XLDset.xml'];
 xmlwrite(xldsetFile,xmlXload);
 
 %% Read and prepare general settings
@@ -91,7 +93,7 @@ ikmotdata = dlmread(subjosikmot,'\t',11,0); % NOTE: zero indexing
 xmlSet = xmlread(subjosidset);
 
 % Modify settings to a trial specific one
-xmlSet.getElementsByTagName('results_directory').item(0).setTextContent(stofilepath); % Output path
+xmlSet.getElementsByTagName('results_directory').item(0).setTextContent([stofilepath]); % Output path
 xmlSet.getElementsByTagName('model_file').item(0).setTextContent(subjosmod); % Model file
 xmlSet.getElementsByTagName('time_range').item(0).setTextContent([num2str(ikmotdata(1,1)) ' ' num2str(ikmotdata(end,1))]);
 xmlSet.getElementsByTagName('external_loads_file').item(0).setTextContent(xldsetFile); % External loads xml
@@ -101,7 +103,7 @@ xmlSet.getElementsByTagName('joints_to_report_body_forces').item(0).setTextConte
 xmlSet.getElementsByTagName('output_body_forces_file').item(0).setTextContent([genfilename 'IDf.sto']); % Output name joint force file
 
 % Write modified settings .xml file
-setFile = [stofilepath genfilename 'IDset.xml'];
+setFile = [xmlfilepath genfilename 'IDset.xml'];
 xmlwrite(setFile,xmlSet);
 
 %% Do inverse dynamics
@@ -111,9 +113,29 @@ disp(['Starting ID for ' genfilename]);
 system(['"' osinstallpath '\bin\id.exe" -Setup ' setFile ' > nul']);
 % NOTE: the > nul suppresses the window output
 
+
+% Rename generic ID outputs and move them to the right folder
+if ~ exist([stofilepath '\DataFiles\'],'dir')
+    mkdir([stofilepath '\DataFiles\']);
+end
+
+if exist([stofilepath genfilename 'ID.sto'],'file')
+    movefile([stofilepath genfilename 'ID.sto'],[stofilepath '\DataFiles\' genfilename 'ID.sto']); % Output log
+end
+
+if exist([stofilepath genfilename 'IDf.sto'],'file')
+    movefile([stofilepath genfilename 'IDf.sto'],[stofilepath '\DataFiles\' genfilename 'IDf.sto']); % Output log
+end
+
+
 % Rename generic ID output log and move it to the right folder
+% Check if folder exist, if not create new
+if ~ exist([stofilepath '\Logs\'],'dir')
+    mkdir([stofilepath '\Logs\']);
+end
+
 if exist('out.log','file')
-    movefile('out.log',[stofilepath genfilename 'IDout.log']); % Output log
+    movefile('out.log',[stofilepath '\Logs\' genfilename 'IDout.log']); % Output log
 end
 if exist('err.log','file')
     
@@ -132,7 +154,7 @@ if exist('err.log','file')
         delete('err.log');
     else
         warning('getOSID:errors',['Please see ' genfilename 'IDerr.log']);
-        movefile('err.log',[stofilepath genfilename 'IDerr.log']); % Error log
+        movefile('err.log',[stofilepath '\Logs\' genfilename 'IDerr.log']); % Error log
     end
 end
 

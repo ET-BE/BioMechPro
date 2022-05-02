@@ -1,4 +1,4 @@
-function [] = getMot(C3Ddata,filename,varargin)
+function [C3Ddata] = getMot(C3Ddata, filename, removeEndFrames)
 %% getMot
 % Create .mot file with external loads (ground reaction forces and moments)
 % for use of point force application in OpenSim.
@@ -87,63 +87,6 @@ function [] = getMot(C3Ddata,filename,varargin)
 fthresh = 20; % default
 
 %% Check input
-
-if nargin > 7
-    error('getMot:inputs','Too many input arguments');
-end
-
-% Defaults
-permvec = [1 2 3];
-extraXLD = {};
-extraXLDdim = [];
-extraXLDposition = {};
-if nargin >= 3
-    
-    permvec = varargin{1};
-    if isempty(permvec)
-        permvec = [1 2 3];
-    elseif (size(permvec,1) == 3) && (size(permvec,2) == 1)
-        permvec = permvec';
-    elseif sum(size(permvec) - [1 3]) ~= 0
-        error('getMot:permvec','Input parameter permvec must be a 1x3 vector.');
-    end
-    
-end    
-if nargin >= 4
-    
-    extraXLD = varargin{2};
-    if ischar(extraXLD) 
-        extraXLD = {extraXLD}; % String to cell
-    end
-    
-end
-
-if nargin >= 5
-    extraXLDposition = varargin{3};
-end
-if nargin >= 6
-
-    extraXLDdim = varargin{4};
-    dimcount = hist(extraXLDdim,max(extraXLDdim));
-    if numel(extraXLDdim) ~= numel(extraXLD)
-        error('getMot:extraXLDdimEl','Number of elements in extraXLD must be the same as in extraXLDdim');
-    elseif any(dimcount>1)
-        error('getMot:extraXLDdimEl2','extraXLDdim may not contain the same dimension number twice');
-    elseif size(extraXLDdim,2) == 1
-        extraXLDdim = extraXLDdim';
-    end
-    
-    if any(diff(extraXLDdim)<0) % User didn't specify dimensions in order
-        [extraXLDdim,perm] = sort(extraXLDdim,'ascend');
-        extraXLD = extraXLD(perm);
-    end
-    
-end
-
-if nargin >=7
-    extraName = varargin{5};
-end
-
 % Check trialname
 if ~ischar(filename)
     error('getMot:trialname','Input trialname must be a string');
@@ -161,49 +104,8 @@ else
     pathname = pwd;
 end
 
-% Check if the extra fields exist in OtherData
-if isfield(C3Ddata,'Other') && ~isempty(extraXLD)
-    for ixld = 1:length(extraXLD)
-        addIdx(ixld) = find( strcmpi(C3Ddata.Other.OtherDataLabel,extraXLD{ixld}) ); % NOTE: Assumed 2D data, and there is no check for non-existing name
-    end
-elseif ~isempty(extraXLD)
-    warning('getMot:extraXLD','No Other field in structure. Cannot add additional external loads.');
-end
-
-
-% Check if the extra position fields exist in MarkerData
-if isfield(C3Ddata,'Marker') && ~isempty(extraXLDposition)
-    for ixld = 1:length(extraXLDposition)
-        addMarkerIdx(ixld) = find( strcmpi(C3Ddata.Marker.MarkerDataLabel,extraXLDposition{ixld}) ); % NOTE: Assumed 2D data, and there is no check for non-existing name
-    end
-elseif ~isempty(extraXLDposition)
-    warning('getMot:extraXLDposition','No Marker field in structure. Cannot add additional external loads.');
-end
-
-% Check if sync indices exist for MarkerData and ForceData
-if ~isfield(C3Ddata.Marker,'MarkerSyncIdx') || ~isfield(C3Ddata.Force,'ForceSyncIdx')
-    warning('getMot:syncIdx',['No sync indices found in' infilename '. Assuming synchronized marker-force data']);
-    
-    markerSyncIdx = [1 size(C3Ddata.Marker.MarkerData,1)];
-    forceSyncIdx = [1 size(C3Ddata.Force.ForceData,1)];
-else
-    markerSyncIdx = C3Ddata.Marker.MarkerSyncIdx;
-    forceSyncIdx = C3Ddata.Force.ForceSyncIdx;
-end
-
-% Check if sync indices exist for OtherData
-if isfield(C3Ddata,'Other')
-    if ~isempty(extraXLD)
-        if ~isfield(C3Ddata.Other,'OtherSyncIdx')
-            otherSyncIdx = [1 size(C3Ddata.Other.OtherData,1)];
-        else
-            otherSyncIdx = C3Ddata.Other.OtherSyncIdx;
-        end
-    end
-end
-
 % Frame rates
-markerFrameRate = C3Ddata.Marker.MarkerFrameRate;
+FrameRate = C3Ddata.Resample.FrameRate;
 % forceFrameRate = C3Ddata.Force.ForceFrameRate;
 
 % Data column header
@@ -216,128 +118,48 @@ columnNames = {'time' ...
     'l_ground_torque_x' 'l_ground_torque_y' 'l_ground_torque_z' ... % Left Moments
     'ground_torque_x' 'ground_torque_y' 'ground_torque_z' }; % Right Moments
 
-% Add additional external loads, if any
-if ~isempty(extraXLD)
-    
-    if isempty(extraXLDdim)
-        for ixld = 1:length(extraXLD)
-            columnNames(end+1:end+3) = {[extraName{ixld} '_vx'] , [extraName{ixld} '_vy'] , [extraName{ixld} '_vz']};
-        end
-        for ixld = 1:length(extraXLD)
-           columnNames(end+1:end+3) = {[extraName{ixld} '_px'] , [extraName{ixld} '_py'] , [extraName{ixld} '_pz']};
-        end
-    else
-        
-        n = 1; 
-        nInGroup = zeros(1,numel(extraXLDdim));
-        while any((extraXLDdim-3*(n-1))>0)
-            nInGroup(n) = sum((extraXLDdim - 3*n)<=0) - sum((extraXLDdim - 3*(n-1))<=0);
-            n = n + 1;
-        end
-        nInGroup(nInGroup<=0) = [];
-        
-        for ixld = cumsum([0 nInGroup(1:end-1)])+1 % First names of groups
-            columnNames(end+1:end+3) = {[extraName{ixld} '_vx'] , [extraName{ixld} '_vy'] , [extraName{ixld} '_vz']};
-        end
-        for ixld = cumsum([0 nInGroup(1:end-1)])+1 % First names of groups
-            columnNames(end+1:end+3) = {[extraName{ixld} '_px'] , [extraName{ixld} '_py'] , [extraName{ixld} '_pz']};
-        end       
-    end
-    
-end
-
 % Data size
-nRows = 1 + markerSyncIdx(end) - markerSyncIdx(1);
+nRows = size(C3Ddata.Resample.Marker, 1) - removeEndFrames;  % make sure the treadmill forces has the same frames as markers
 nColumns = length(columnNames);
-
-%% Get number of force samples equal to number of marker samples
-
-nMarkSmpl = markerSyncIdx(end) - markerSyncIdx(1) + 1;
-forceIdx = round(linspace(forceSyncIdx(1),forceSyncIdx(end),nMarkSmpl));
-
-if ~isempty(extraXLD)
-    if isfield(C3Ddata, 'Other')
-        otherIdx = round(linspace(otherSyncIdx(1),otherSyncIdx(end),nMarkSmpl));
-    end
-    markerIdx = round(linspace(markerSyncIdx(1),markerSyncIdx(end),nMarkSmpl));
-end
-
 %% Collect FORCE, MOMENT and COP data to write
 
 % Collect force and moment data
-permall = [permvec permvec+3 permvec+6 permvec+9];  % Assumed 12 channel MGRF
-forceData = C3Ddata.Force.ForceData(forceIdx,permall);
-momentLData = forceData(:,[4:6]);
-forceLData = forceData(:,[1:3]);
-momentRData = forceData(:,[10:12]);
-forceRData = forceData(:,[7:9]);
-
-if ~isempty(extraXLD)
-    if isfield(C3Ddata, 'Other')
-        if isempty(extraXLDdim)
-            otherData = zeros(length(otherIdx),3*length(addIdx));
-            otherData(:,1 + (0:3:3*length(addIdx)-1) ) = C3Ddata.Other.OtherData(otherIdx,addIdx); % Each element in extraXLD gets its own xyz input, with yz being 0
-        else
-            otherData = zeros(length(otherIdx),3*length(nInGroup));
-            otherData(:,extraXLDdim) = C3Ddata.Other.OtherData(otherIdx,addIdx);
-        end
-    
-        % Apply permVec
-        osiz = size(otherData,2);
-        permadd = repmat(zeros(1,3),[1 osiz/3]);
-        permadd(1:3:osiz) = 0:3:3*(osiz/3 - 1);
-        permadd = cumsum(permadd);
-        permall = repmat(permvec,[1 osiz/3]) + permadd;
-        otherData = otherData(:,permall);
-    else 
-        otherData = [];
-    end
-    % position data other forces
-    if isempty(extraXLDposition)
-        positionData = zeros(length(markerIdx),3*length(addMarkerIdx));
-    else 
-        positionData = zeros(length(markerIdx),3*length(addMarkerIdx));
-        for iaddMark = 1:length(addMarkerIdx)
-            idx = 1+((iaddMark-1)*3);
-%             positionData(:,idx:idx+2) = squeeze(C3Ddata.Marker.MarkerData(:,addMarkerIdx(iaddMark),:));
-            positionData(:,idx:idx+2) = squeeze(C3Ddata.Marker.MarkerData(markerIdx,addMarkerIdx(iaddMark),:));
-        end
-    end
-   
-else
-    otherData = [];
-%     positionData=[]; %temp
-end
+% permall = [permvec permvec+3 permvec+6 permvec+9];  % Assumed 12 channel MGRF
+% forceData = C3Ddata.Force.ForceData(forceIdx,permall);
+% momentLData = C3Ddata.Resample.Force.Left(:,[4:6]);
+% forceLData = C3Ddata.Resample.Force.Left(:,[1:3]);
+% momentRData = C3Ddata.Resample.Force.Right(:,[4:6]);
+% forceRData = C3Ddata.Resample.Force.Right(:,[1:3]);
+forceData = [C3Ddata.Resample.Force.Left(1:nRows, 1:6) C3Ddata.Resample.Force.Right(1:nRows, 1:6)];
 
 % COP data 
 % unless the forceplate CRF has an offset wrt the MoCap CRF)
 % TODO: allow for time varying plate offsets (timeseries in structure)
 if ~isfield(C3Ddata.Force,'ForcePlateOffset')
-    copData = zeros(size(forceData,1),6);
+    copData = zeros(nRows,6);
 
 else
-    copData = repmat(C3Ddata.Force.ForcePlateOffset,[size(forceData,1) 1]);
-    copData = copData(:,[permvec permvec+3]); 
+    copData = repmat(C3Ddata.Force.ForcePlateOffset,[nRows 1]);
 end
-copStruct = getCOP(forceData,fthresh);
+copStruct = getCOP(forceData,fthresh);  % the recorded CoP is not at the same coordiante with Force/Moment, especially in X direction
 copData(:,1:3) = copData(:,1:3)+copStruct.COPL;
 copData(:,4:6) = copData(:,4:6)+copStruct.COPR;
 
 %Zeros for all M but My (free torque, it has the vertical (Z) (Y in OpenSim) component only: http://www.kwon3d.com/theory/grf/grf.html)
-momentLData(:,1) = zeros(size(momentLData,1),1); %MxL
-momentLData(:,3) = zeros(size(momentLData,1),1); %MzL
-momentRData(:,1) = zeros(size(momentRData,1),1); %MxR
-momentRData(:,3) = zeros(size(momentRData,1),1); %MzR
+forceData(:,4) = zeros(size(forceData,1),1); %MxL
+forceData(:,6) = zeros(size(forceData,1),1); %MzL
+forceData(:,10) = zeros(size(forceData,1),1); %MxR
+forceData(:,12) = zeros(size(forceData,1),1); %MzR
 
-forceLData(isnan(copData(:,1:3))) = 0;
-forceRData(isnan(copData(:,4:6))) = 0;
-momentLData(isnan(copData(:,1:3))) = 0;
-momentRData(isnan(copData(:,4:6))) = 0;
+% if the CoP is NaN, make all the forces and moments equal zero
+forceData(isnan(copData(:, 1)), 1:6) = 0;
+forceData(isnan(copData(:,4)), 7:12) = 0;
 
+% resign CoP to zeros from NaNs.
 copData(isnan(copData)) =0;
 
 % Add time column
-    writeData = [(0:size(forceData,1)-1)'./markerFrameRate forceLData copData(:,1:3)  forceRData copData(:,4:6) momentLData momentRData];
+writeData = [(0:nRows-1)'./FrameRate forceData(:, 1:3) copData(:,1:3) forceData(:, 7:9) copData(:,4:6) forceData(:, 4:6) forceData(:, 10:12)];
 
 %% Create file and write header
 
@@ -370,5 +192,8 @@ fprintf(fid,writeStr);
 fclose(fid);
 
 disp([infilename 'XLD.mot created in ' pathname]);
+
+C3Ddata.Resample.Sych.ForcePlateGRFData = writeData;
+C3Ddata.Resample.Sych.ForcePlateGRFDataLabel = columnNames;
 
 end

@@ -62,7 +62,6 @@ function [copdata] = getCOP(fdata,fthresh)
         % Set contactless force to NaN
         fdata( fdata(:,2) < fthresh , 2) = NaN;
         fdata( fdata(:,8) < fthresh , 8) = NaN;
-        fdatat( fdatat(:,2) < fthresh , 2) = NaN;
         
         % Get COP
         COPL = [ fdata(:,6) ./ fdata(:,2) , zeros(length(fdata),1), -fdata(:,4) ./ fdata(:,2)];

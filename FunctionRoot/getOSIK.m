@@ -63,7 +63,7 @@ trcData = dlmread(subjostrc,'\t',6,1);
 if ~isempty(strfind(subjostrc,'\'))
     foo = strfind(subjostrc,'\');
     trcfilename = regexprep(subjostrc(foo(end)+1:end),'.trc','');
-    trcfilepath = subjostrc(1:foo(end));
+    trcfilepath = subjostrc(1:foo(end-1));
 else
     trcfilename = regexprep(trialname,'.trc');
     trcfilepath = pwd;
@@ -98,7 +98,7 @@ else
 end
 xmlSet.getElementsByTagName('model_file').item(0).setTextContent(subjosmod); % Input model file
 xmlSet.getElementsByTagName('marker_file').item(0).setTextContent(subjostrc);  % Input marker file 
-xmlSet.getElementsByTagName('output_motion_file').item(0).setTextContent([trcfilepath trcfilename 'IK.mot']); % Output file
+xmlSet.getElementsByTagName('output_motion_file').item(0).setTextContent([trcfilepath 'DataFiles\' trcfilename 'IK.mot']); % Output file
 xmlSet.getElementsByTagName('time_range').item(0).setTextContent([num2str(trcData(1,1)) ' ' num2str(trcData(end,1))]); % Output range
 
 clear trcData;
@@ -115,8 +115,14 @@ system(['"' osinstallpath '\bin\ik.exe" -Setup ' setFile ' > nul']);
 % NOTE: the > nul suppresses the window output
 
 % Rename generic IK output log and move it to the right folder
+
+% Check if folder exist, if not create new
+if ~ exist([trcfilepath '\Logs\'],'dir')
+    mkdir([trcfilepath '\Logs\']);
+end
+
 if exist('out.log','file')
-    movefile('out.log',[trcfilepath trcfilename 'IKout.log']); % Output log
+    movefile('out.log',[trcfilepath '\Logs\' trcfilename 'IKout.log']); % Output log
 end
 if exist('err.log','file')
     
@@ -134,7 +140,7 @@ if exist('err.log','file')
         delete('err.log');
     else
         warning('getOSIK:errors',['Please see ' trcfilename 'IKerr.log']);
-        movefile('err.log',[trcfilepath trcfilename 'IKerr.log']); % Error log
+        movefile('err.log',[trcfilepath '\Logs\' trcfilename 'IKerr.log']); % Error log
     end
 end
 
